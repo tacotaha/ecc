@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	g, e, err := ecc.Secp256k1()
+	e, g, _, err := ecc.Secp256k1()
 	if err != nil {
 		log.Fatal(err)
 	}

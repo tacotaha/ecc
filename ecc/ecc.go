@@ -65,24 +65,27 @@ func NewCurve(A, B, P *big.Int) (*Curve, error) {
 	return c, nil
 }
 
-func Secp256k1() (*Point, *Curve, error) {
+func Secp256k1() (*Curve, *Point, *big.Int, error) {
 	p := big.NewInt(0)
 	gX := big.NewInt(0)
 	gY := big.NewInt(0)
+	gOrder := big.NewInt(0)
 
 	// recommended params: http://www.secg.org/sec2-v2.pdf
 	pStr := "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F"
 	gXStr := "0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798"
 	gYStr := "0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8"
+	gOrderStr := "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141"
 
 	fmt.Sscan(pStr, p)
 	fmt.Sscan(gXStr, gX)
 	fmt.Sscan(gYStr, gY)
+	fmt.Sscan(gOrderStr, gOrder)
 
 	c, err := NewCurve(big.NewInt(0), big.NewInt(7), p)
 	g := NewPoint(gX, gY)
 
-	return g, c, err
+	return c, g, gOrder, err
 }
 
 func (c *Curve) Valid() bool {
