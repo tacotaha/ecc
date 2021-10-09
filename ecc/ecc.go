@@ -35,20 +35,19 @@ func (p *Point) Equal(p2 *Point) bool {
 	return p.X.Cmp(p2.X) == 0 && p.Y.Cmp(p2.Y) == 0
 }
 
-func (p *Point) ToString(compressed bool) string {
+func (p *Point) Encode(compressed bool) []byte {
+	x := make([]byte, 32)
+	y := make([]byte, 32)
+
+	p.X.FillBytes(x)
+	p.Y.FillBytes(y)
+
 	if !compressed {
-		return "04 " + p.X.Text(16) + " " + p.Y.Text(16)
+		return append(append([]byte{0x04}, x...), y...)
 	}
 
-	var prefix string
-
-	if p.Y.Bit(0) == 1 {
-		prefix = "03"
-	} else {
-		prefix = "02"
-	}
-
-	return prefix + " " + p.X.Text(16)
+	prefix := byte(0x02 + p.Y.Bit(0))
+	return append([]byte{prefix}, x...)
 }
 
 func NewCurve(A, B, P *big.Int) (*Curve, error) {
@@ -173,6 +172,58 @@ func (c *Curve) Mul(p *Point, a *big.Int) *Point {
 		}
 	}
 	return res
+}
+
+// eval y = sqrt(x^3 + ax + b mod p)
+func (c *Curve) Eval(x *big.Int) *big.Int {
+	y_2 := new(big.Int)
+	x_3 := new(big.Int)
+	a_x := new(big.Int)
+	p_1 := new(big.Int)
+	inv := new(big.Int)
+
+	// x^3 mod p
+	x_3.Exp(x, big.NewInt(3), c.P)
+
+	// ax
+	a_x.Mul(c.A, x)
+	a_x.Mod(a_x, c.P)
+
+	// y_2 = x^3 + ax + b mod p
+	y_2.Add(x_3, a_x)
+	y_2.Add(y_2, c.B)
+	y_2.Mod(y_2, c.P)
+
+	// (p + 1) / 4
+	p_1.Add(c.P, big.NewInt(1))
+	inv.ModInverse(big.NewInt(4), c.P)
+	p_1.Mul(p_1, inv)
+	p_1.Mod(p_1, c.P)
+
+	// y = (y_2) ^ ((p + 1) / 4) mod p
+	return y_2.Exp(y_2, p_1, c.P)
+}
+
+func (c *Curve) Decode(buf []byte, g *Point) (*Point, error) {
+	prefix := buf[0]
+	point := buf[1:]
+	pt := Zero()
+
+	if prefix > 0x04 || prefix < 0x02 {
+		return nil, fmt.Errorf("Invalid string prefix: %x. Must be one of (02, 03, 04)\n", prefix)
+	}
+
+	pt.X.SetBytes(point[:32])
+	if prefix == 0x04 {
+		pt.Y.SetBytes(point[32:])
+	} else {
+		pt.Y = c.Eval(pt.X)
+		if (prefix == 0x03 && pt.Y.Bit(0) != 1) || (prefix == 0x02 && pt.Y.Bit(0) == 1) {
+			pt.Y.Sub(c.P, pt.Y)
+		}
+	}
+
+	return pt, nil
 }
 
 func GenKey(blen int) *big.Int {
