@@ -9,7 +9,8 @@ import (
 )
 
 type Point struct {
-	X, Y *big.Int
+	X, Y  *big.Int
+	IsInf bool
 }
 
 type Curve struct {
@@ -18,17 +19,30 @@ type Curve struct {
 }
 
 func NewPoint(x, y *big.Int) *Point {
-	p := Zero()
-	p.X.Set(x)
-	p.Y.Set(y)
+	p := new(Point)
+	p.X = new(big.Int)
+	p.Y = new(big.Int)
+	if x != nil {
+		p.X.Set(x)
+	}
+	if y != nil {
+		p.Y.Set(y)
+	}
+	p.IsInf = p.CheckInf()
 	return p
 }
 
-func Zero() *Point {
+func Inf() *Point {
 	p := new(Point)
 	p.X = big.NewInt(0)
 	p.Y = big.NewInt(0)
+	p.IsInf = true
 	return p
+}
+
+func (p *Point) CheckInf() bool {
+	z := int64(0)
+	return p.X.Int64() == z && p.Y.Int64() == z
 }
 
 func (p *Point) Equal(p2 *Point) bool {
@@ -129,6 +143,10 @@ func (c *Curve) Add(p, q *Point) *Point {
 		sDen.Sub(sDen, p.X)
 	}
 
+	if sDen.Int64() == 0 {
+		return Inf()
+	}
+
 	sDen.ModInverse(sDen, c.P)
 	sNum.Mul(sNum, sDen)
 	sNum.Mod(sNum, c.P)
@@ -149,8 +167,7 @@ func (c *Curve) Add(p, q *Point) *Point {
 }
 
 func (c *Curve) Inv(p *Point) *Point {
-	q := Zero()
-	q.X.Set(p.X)
+	q := NewPoint(p.X, p.Y)
 	q.Y.Sub(c.P, p.Y)
 	return q // (x, P - y)
 }
@@ -167,6 +184,9 @@ func (c *Curve) Mul(p *Point, a *big.Int) *Point {
 
 	for i := bl - 1; i >= 0; i-- {
 		res = c.Add(res, res)
+		if res.CheckInf() {
+			return Inf()
+		}
 		if a.Bit(i) == 1 {
 			res = c.Add(res, p)
 		}
@@ -207,7 +227,7 @@ func (c *Curve) Eval(x *big.Int) *big.Int {
 func (c *Curve) Decode(buf []byte, g *Point) (*Point, error) {
 	prefix := buf[0]
 	point := buf[1:]
-	pt := Zero()
+	pt := NewPoint(nil, nil)
 
 	if prefix > 0x04 || prefix < 0x02 {
 		return nil, fmt.Errorf("Invalid string prefix: %x. Must be one of (02, 03, 04)\n", prefix)
