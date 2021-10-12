@@ -7,21 +7,20 @@ import (
 	"log"
 	"math/big"
 
+	"github.com/tacotaha/ecc/curve25519"
 	"github.com/tacotaha/ecc/ecc"
 	"github.com/tacotaha/ecc/ecdsa"
+	"github.com/tacotaha/ecc/secp256k1"
 )
 
 func testEncoding() {
-	c, g, _, err := ecc.Secp256k1()
-	if err != nil {
-		log.Fatal(err)
-	}
+	s := secp256k1.NewCurve()
 
 	for i := 0; i < (1 << 10); i++ {
 		priv := ecc.GenKey(256)
-		pub := c.Mul(g, priv)
+		pub := s.Mul(s.G, priv)
 
-		decoded, err := c.Decode(pub.Encode(false), g)
+		decoded, err := s.Decode(pub.Encode(false))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -29,7 +28,7 @@ func testEncoding() {
 			log.Fatal("Invalid Encoding")
 		}
 
-		decoded, err = c.Decode(pub.Encode(true), g)
+		decoded, err = s.Decode(pub.Encode(true))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -39,25 +38,22 @@ func testEncoding() {
 	}
 }
 
-func testGProps() {
+func s256k1() {
 	c := new(big.Int)
-	s, g, n, err := ecc.Secp256k1()
-	if err != nil {
-		log.Fatal(err)
-	}
+	s := secp256k1.NewCurve()
 
-	if !s.Mul(g, n).IsInf {
+	if !s.Mul(s.G, s.N).IsInf {
 		log.Fatal("infinity check")
 	}
 
 	for i := 0; i < (1 << 10); i++ {
-		a, _ := rand.Int(rand.Reader, n)
-		b, _ := rand.Int(rand.Reader, n)
+		a, _ := rand.Int(rand.Reader, s.N)
+		b, _ := rand.Int(rand.Reader, s.N)
 		c.Add(a, b)
 
-		p := s.Mul(g, a)
-		q := s.Mul(g, b)
-		r := s.Mul(g, c)
+		p := s.Mul(s.G, a)
+		q := s.Mul(s.G, b)
+		r := s.Mul(s.G, c)
 
 		pq := s.Add(q, p)
 		qp := s.Add(p, q)
@@ -72,14 +68,37 @@ func testGProps() {
 	}
 }
 
-func main() {
-	c, g, _, err := ecc.Secp256k1()
-	if err != nil {
-		log.Fatal(err)
+func c25519() {
+	curve := curve25519.NewCurve()
+
+	if !curve.Mul(curve.G.ToJacobi(), curve.N).IsInf() {
+		log.Fatal("infinity check")
 	}
 
+	for i := 0; i < (1 << 10); i++ {
+		a, _ := rand.Int(rand.Reader, curve.N)
+		b, _ := rand.Int(rand.Reader, curve.N)
+
+		gJ := curve.G.ToJacobi()
+
+		p := curve.Mul(gJ, a)
+		q := curve.Mul(gJ, b)
+		pq := curve.Add(q, p)
+		qp := curve.Add(p, q)
+
+		if !pq.Equal(qp) {
+			log.Fatal("commutative check")
+		}
+	}
+
+	return
+}
+
+func main() {
+	curve := secp256k1.NewCurve()
+
 	priv := ecc.GenKey(256)
-	pub := c.Mul(g, priv)
+	pub := curve.Mul(curve.G, priv)
 
 	fmt.Println("Priv Key: ", priv.Text(16))
 	fmt.Println("Pub key: ", hex.EncodeToString(pub.Encode(true)))
@@ -96,6 +115,7 @@ func main() {
 	fmt.Println("Valid sig: ", valid)
 	fmt.Println("Invalid sig: ", invalid)
 
-	testGProps()
 	testEncoding()
+	s256k1()
+	c25519()
 }

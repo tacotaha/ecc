@@ -7,23 +7,20 @@ import (
 	"crypto/sha256"
 
 	"github.com/tacotaha/ecc/ecc"
+	"github.com/tacotaha/ecc/secp256k1"
 )
 
 type ECDSA struct {
-	E *ecc.Curve
-	G *ecc.Point
-	N *big.Int
+	S *secp256k1.Secp256k1
 }
 
 func NewECDSA() *ECDSA {
-	e := new(ECDSA)
-	e.E, e.G, e.N, _ = ecc.Secp256k1()
-	return e
+	return &ECDSA{secp256k1.NewCurve()}
 }
 
 func (e *ECDSA) GenKeyPair() (*big.Int, *ecc.Point) {
-	priv, _ := rand.Int(rand.Reader, e.N)
-	pub := e.E.Mul(e.G, priv)
+	priv, _ := rand.Int(rand.Reader, e.S.N)
+	pub := e.S.Mul(e.S.G, priv)
 	return priv, pub
 }
 
@@ -40,17 +37,17 @@ func (e *ECDSA) Sign(msg []byte, priv *big.Int) (*big.Int, *big.Int) {
 
 	mh := e.HashMsg(msg)
 
-	kE, _ := rand.Int(rand.Reader, e.N)
-	kEInv.ModInverse(kE, e.N)
+	kE, _ := rand.Int(rand.Reader, e.S.N)
+	kEInv.ModInverse(kE, e.S.N)
 
 	// r = kE * G
-	r := e.E.Mul(e.G, kE).X
+	r := e.S.Mul(e.S.G, kE).X
 
 	// s = (h(msg) + priv * r) * kE^-1 mod n
 	s.Mul(priv, r)
 	s.Add(s, mh)
 	s.Mul(s, kEInv)
-	s.Mod(s, e.N)
+	s.Mod(s, e.S.N)
 
 	return r, s
 }
@@ -62,20 +59,20 @@ func (e *ECDSA) Verify(msg []byte, r, s *big.Int, pubKey *ecc.Point) bool {
 	check := big.NewInt(0)
 
 	mh := e.HashMsg(msg)
-	sInv.ModInverse(s, e.N)
+	sInv.ModInverse(s, e.S.N)
 
 	// x = s^-1 * h(msg) mod n
 	x.Mul(sInv, mh)
-	x.Mod(x, e.N)
+	x.Mod(x, e.S.N)
 
 	// y = s^-1 * r mod n
 	y.Mul(sInv, r)
-	y.Mod(y, e.N)
+	y.Mod(y, e.S.N)
 
 	// p = x * G + y * PubKey
-	p := e.E.Add(e.E.Mul(e.G, x), e.E.Mul(pubKey, y))
+	p := e.S.Add(e.S.Mul(e.S.G, x), e.S.Mul(pubKey, y))
 
-	check.Mod(r, e.N)
+	check.Mod(r, e.S.N)
 
 	// P_x == r mod n
 	return p.X.Cmp(check) == 0
